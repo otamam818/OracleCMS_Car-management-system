@@ -10,7 +10,7 @@ A `Des` management system provided as a Coding Task from `UsedmiDNT`. This proje
 ## Roadmap
 ### General Goals
 - [ ] Define the data model
-- [ ] Set up the Web API project
+- [X] Set up the Web API project
 - [ ] Create the database context
 - [ ] Configure the services and the middleware
 - [ ] Create the controllers
