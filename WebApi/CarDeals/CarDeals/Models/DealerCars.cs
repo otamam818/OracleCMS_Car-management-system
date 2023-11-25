@@ -3,12 +3,19 @@ using System.ComponentModel.DataAnnotations;
 
 namespace CarDeals.Models
 {
-    public class DealerCars(string dealerId, string carId)
+    public class DealerCars
     {
         // Primary Foreign Key Made from Dealer.Id and Car.Id
         // Format: `{Dealer.Id} | {Car.Id}`
+
+        public DealerCars() { }
+        public DealerCars(string dealerId, string carId)
+        {
+            Id = MakeDealerId(dealerId, carId);
+        }
+
         [Key]
-        public string Id { get; set; } = $"{dealerId} | {carId}";
+        public string Id { get; set; } = null!;
 
         // Attributes
         [Required]
@@ -22,6 +29,11 @@ namespace CarDeals.Models
         public string GetCarId()
         {
             return Id.Split(" | ", StringSplitOptions.None)[1];
+        }
+
+        public static string MakeDealerId(string dealerId, string carId)
+        {
+            return $"{dealerId} | {carId}";
         }
     }
 }

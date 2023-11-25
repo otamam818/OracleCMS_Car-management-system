@@ -15,6 +15,7 @@ namespace CarDeals.Controllers
     public class CarsController(CarDealerContext context) : ControllerBase
     {
         private readonly CarDealerContext _context = context;
+        private readonly uint MINUTES_ALLOWED = 30;
 
         // GET: api/Cars
         [HttpGet]
@@ -27,7 +28,7 @@ namespace CarDeals.Controllers
                 (car, company) => new
                 {
                     id = car.Id,
-                    companyName = company.Name,
+                    make = company.Name,
                     model = car.Model,
                     price = car.Price
                 }).ToListAsync(); // Convert the result to a list asynchronously
@@ -36,8 +37,8 @@ namespace CarDeals.Controllers
             return Ok(new { carList });
         }
 
-        // GET: api/Cars/car/{passwordHash}
-        [HttpGet("company/{passwordHash}")]
+        // GET: api/Cars/dealer/{passwordHash}
+        [HttpGet("dealer/{passwordHash}")]
         public async Task<ActionResult<JsonResult>> GetCarsByCompany(string passwordHash)
         {
             var foundDealerId = await GetDealerIdFromHash(passwordHash);
@@ -55,7 +56,7 @@ namespace CarDeals.Controllers
                     (joinedTable, company) => new
                     {
                         carId = joinedTable.carData.Id,
-                        companyName = company.Name,
+                        make = company.Name,
                         price = joinedTable.carData.Price,
                         model = joinedTable.carData.Model,
                         stock = joinedTable.dealerCar.Stock
@@ -96,7 +97,7 @@ namespace CarDeals.Controllers
             return Ok(new { carList });
         }
 
-        // Post: api/Cars/Search/Model
+        // POST: api/Cars/Search/Model
         [HttpPost("Search/Model")]
         public async Task<ActionResult<JsonResult>> SearchByModel(string passwordHash, string modelName)
         {
@@ -143,8 +144,8 @@ namespace CarDeals.Controllers
 
         // PUT: api/Cars/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutCar(int id, Car car)
+        [HttpPut("Update/Car/{id}")]
+        public async Task<IActionResult> UpdateCar(int id, Car car)
         {
             if (id != car.Id)
             {
@@ -170,6 +171,44 @@ namespace CarDeals.Controllers
             }
 
             return NoContent();
+        }
+
+        // PUT: api/Cars/Update/Stock/
+        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPost("Update/Stock/")]
+        public async Task<IActionResult> UpdateStock(int CarId, int NewStockValue, string PasswordHash)
+        {
+            if (PasswordHash == null)
+            {
+                return BadRequest();
+            }
+
+            // Make sure the PasswordHash is the only way to get the relevant Id values
+            var dealerId = await GetDealerIdFromHash(PasswordHash);
+            var dealerCarId = DealerCars.MakeDealerId(dealerId.ToString(), CarId.ToString());
+
+            // Retrieve a dealerCar value if it exists
+            var dealerCar = await _context.DealersCars.FindAsync(dealerCarId);
+            if (dealerCar == null)
+            {
+                return NotFound();
+            }
+
+            // If no value is returned prior to this statement, it is safe
+            // to mutate the Stock value
+            dealerCar.Stock = NewStockValue;
+
+            // Values have changed locally, time to change them globally
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw;
+            }
+
+            return Ok(new { message = "Success" });
         }
 
         // POST: api/Cars
@@ -209,10 +248,32 @@ namespace CarDeals.Controllers
             // Find the ID associated with the passwordHash
             var foundDealerQuery = (from dealer in _context.Deals
                                  where dealer.PasswordHash == passwordHash
-                                 select dealer.Id) ?? throw new Exception("Not found");
-            var foundDealerId = await foundDealerQuery.SingleAsync();
+                                 select dealer) ?? throw new Exception("Not found");
+            var foundDealer = await foundDealerQuery.SingleAsync();
+            if (_context.SignedInUsers.TryGetValue(foundDealer.Name, out DateTime timeLastSignedIn))
+            {
+                // Check if the session has lasted for too long
+                var MinutesElapsed = (DateTime.Now - timeLastSignedIn).TotalMinutes;
+                if (MinutesElapsed > MINUTES_ALLOWED)
+                {
+                    throw new Exception("Session expired");
+                } else
+                {
+                    // Renew the session counter (since the user interacted with it)
+                    _context.SignedInUsers[foundDealer.Name] = DateTime.Now;
+                }
+            }
 
-            return foundDealerId;
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw;
+            }
+
+            return foundDealer.Id;
         }
     }
 }
