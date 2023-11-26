@@ -7,7 +7,7 @@ namespace CarDeals.Models
     public class Dealer(string Name, string PasswordHash)
     {
         [Key]
-        public double Id { get; set; } = SecondsSinceEpoch();
+        public double Id { get; set; } = Utils.SecondsSinceEpoch();
 
         [Required]
         public string Name { get; set; } = Name;
@@ -16,11 +16,5 @@ namespace CarDeals.Models
         // So passwords should be appended with a salt and then stored as hashes
         [Required]
         public string PasswordHash { get; set; } = PasswordHash;
-
-        public static double SecondsSinceEpoch()
-        {
-            TimeSpan diff = DateTime.Now.ToUniversalTime() - DateTime.UnixEpoch;
-            return Math.Floor(diff.TotalSeconds);
-        }
     }
 }

@@ -6,8 +6,17 @@ namespace CarDeals.Models
 {
     public class Company
     {
+        public Company() { }
+
+        public Company(string Name, string? Address)
+        {
+            Id = Utils.SecondsSinceEpoch();
+            this.Name = Name;
+            this.Address = Address;
+        }
+
         [Key]
-        public long Id {  get; set; }
+        public double Id {  get; set; }
 
         [Required]
         public string Name { get; set; } = null!;

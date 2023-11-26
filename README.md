@@ -226,5 +226,4 @@ Deletes a car based on its id
 - [ ] Submit code
 
 ### Stretch goals
-- [ ] Dockerize the app
 - [ ] Make a Svelte UI for it

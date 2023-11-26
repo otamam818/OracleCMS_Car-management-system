@@ -28,6 +28,38 @@ namespace CarDeals.Controllers
             return await _context.Deals.Select(u => u.Name).ToListAsync();
         }
 
+        // GET: api/Dealers/SignInStatus/
+        [HttpGet("SignInStatus/{passwordHash}")]
+        public async Task<ActionResult<IEnumerable<string>>> SignInStatus(string passwordHash)
+        {
+            var foundUser = await _context.SignedInUsers.FindAsync(passwordHash);
+            if (foundUser != null)
+            {
+                if ((DateTime.Now - foundUser.LastSignedIn).TotalMinutes > CarsController.MINUTES_ALLOWED)
+                {
+                    // If it's expired, there is no need to keep this record anymore
+                    _context.SignedInUsers.Remove(foundUser);
+                    return Ok(new { status = "SessionExpired" });
+                }
+
+                // Renew the session counter (since the user interacted with it)
+                foundUser.LastSignedIn = DateTime.Now;
+                _context.SignedInUsers.Update(foundUser);
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    throw;
+                }
+
+                return Ok(new { status = "SessionExists" });
+            }
+            return Ok(new { status = "NotSignedIn" });
+        }
+
         // POST: api/Dealers/SignUp
         [HttpPost("SignUp")]
         public async Task<IActionResult> SignUpDealer(string username, string password)
@@ -54,7 +86,7 @@ namespace CarDeals.Controllers
             _context.Deals.Add(dealer).State = EntityState.Added;
 
             // Sign Up was a success, they should be logged in now
-            _context.SignedInUsers.Add(dealer.Name, DateTime.Now);
+            _context.SignedInUsers.Add(new SignedInUser(dealer.PasswordHash));
 
             try
             {
@@ -65,7 +97,10 @@ namespace CarDeals.Controllers
                 throw;
             }
 
-            return Ok(new { message = "Success", hashValue = dealer.PasswordHash } );
+            return Ok(new {
+                hashValue = dealer.PasswordHash,
+                status = 200
+            } );
         }
 
         // POST: api/Dealers/SignIn
@@ -74,28 +109,28 @@ namespace CarDeals.Controllers
         public async Task<IActionResult> SignInDealer(string username, string password)
         {
             // Before we sign them in, we must check if the passwords match
-            var ExpectedPassword = password + SALT;
+            var ExpectedPassword = ComputeHashValue(password + SALT);
             var ExecutedQuery = from dealers in _context.Deals
                             where dealers.PasswordHash == ExpectedPassword && dealers.Name == username
                             select dealers;
-            var FoundDealer = ExecutedQuery.First();
-            if (FoundDealer == null)
-            {
-                return NotFound();
-            }
-
-            _context.SignedInUsers.Add(username, DateTime.Now);
-
             try
             {
+                var FoundDealer = await ExecutedQuery.SingleAsync();
+                _context.SignedInUsers.Update(new SignedInUser(FoundDealer.PasswordHash));
+
                 await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
+
+                return Ok(new {
+                    hashValue = FoundDealer.PasswordHash,
+                    status = 200
+                } );
+            } catch (InvalidOperationException)
+            {
+                return NotFound();
+            } catch (DbUpdateConcurrencyException)
             {
                 throw;
             }
-
-            return Ok(new { message = "Success", hashValue = FoundDealer.PasswordHash } );
         }
 
         // DELETE: api/Dealers/5

@@ -15,15 +15,15 @@ namespace CarDeals.Controllers
     public class CarsController(CarDealerContext context) : ControllerBase
     {
         private readonly CarDealerContext _context = context;
-        private readonly uint MINUTES_ALLOWED = 30;
+        public static readonly uint MINUTES_ALLOWED = 30;
 
         // GET: api/Cars
         [HttpGet]
-        public async Task<ActionResult<JsonResult>> GetCars()
+        public async Task<ActionResult<object>> GetCars()
         {
             // Join the Cars and Companies collections based on the matching Id values
             var carList = await _context.Cars.Join(_context.Companies,
-                car => car.Id,
+                car => car.CompanyId,
                 company => company.Id,
                 (car, company) => new
                 {
@@ -39,19 +39,19 @@ namespace CarDeals.Controllers
 
         // GET: api/Cars/dealer/{passwordHash}
         [HttpGet("dealer/{passwordHash}")]
-        public async Task<ActionResult<JsonResult>> GetCarsByCompany(string passwordHash)
+        public async Task<ActionResult<object>> GetCarsByCompany(string passwordHash)
         {
             var foundDealerId = await GetDealerIdFromHash(passwordHash);
 
             // Join the DealerCars, Dealer, Car, and Company collections based on the matching Id values
             var carList = await _context.DealersCars
-                .Where(dealerCar => dealerCar.GetDealerId().Equals(foundDealerId))
+                .Where(dealerCar => dealerCar.DealerId.Equals(foundDealerId))
                 .Join(_context.Cars,
-                    dealerCar => dealerCar.GetCarId(),
-                    car => car.Id.ToString(),
+                    dealerCar => dealerCar.CarId,
+                    car => car.Id,
                     (dealerCar, carData) => new { dealerCar, carData })
                 .Join(_context.Companies,
-                    joinedTable => joinedTable.carData.Id,
+                    joinedTable => joinedTable.carData.CompanyId,
                     company => company.Id,
                     (joinedTable, company) => new
                     {
@@ -68,7 +68,7 @@ namespace CarDeals.Controllers
 
         // Post: api/Cars/Search/Make
         [HttpPost("Search/Make")]
-        public async Task<ActionResult<JsonResult>> SearchByMake(string passwordHash, string makeName)
+        public async Task<ActionResult<object>> SearchByMake(string passwordHash, string makeName)
         {
             var foundDealerId = await GetDealerIdFromHash(passwordHash);
 
@@ -80,11 +80,11 @@ namespace CarDeals.Controllers
                     car => car.CompanyId,
                     (company, car) => new { company, car })
                 .Join(_context.DealersCars,
-                    joinedTable => joinedTable.car.Id.ToString(),
-                    dealersCars => dealersCars.GetCarId(),
+                    joinedTable => joinedTable.car.Id,
+                    dealersCars => dealersCars.CarId,
                     (joinedTable,  dealersCars) => new
                     {
-                        dealerId = dealersCars.GetDealerId(),
+                        dealerId = dealersCars.DealerId,
                         companyId = joinedTable.company.Id,
                         carId = joinedTable.car.Id,
                         make = joinedTable.company.Name,
@@ -99,7 +99,7 @@ namespace CarDeals.Controllers
 
         // POST: api/Cars/Search/Model
         [HttpPost("Search/Model")]
-        public async Task<ActionResult<JsonResult>> SearchByModel(string passwordHash, string modelName)
+        public async Task<ActionResult<object>> SearchByModel(string passwordHash, string modelName)
         {
             var foundDealerId = await GetDealerIdFromHash(passwordHash);
 
@@ -111,11 +111,11 @@ namespace CarDeals.Controllers
                     company => company.Id,
                     (car, company) => new { company, car })
                 .Join(_context.DealersCars,
-                    joinedTable => joinedTable.car.Id.ToString(),
-                    dealersCars => dealersCars.GetCarId(),
+                    joinedTable => joinedTable.car.Id,
+                    dealersCars => dealersCars.CarId,
                     (joinedTable,  dealersCars) => new
                     {
-                        dealerId = dealersCars.GetDealerId(),
+                        dealerId = dealersCars.DealerId,
                         companyId = joinedTable.company.Id,
                         carId = joinedTable.car.Id,
                         make = joinedTable.company.Name,
@@ -185,10 +185,9 @@ namespace CarDeals.Controllers
 
             // Make sure the PasswordHash is the only way to get the relevant Id values
             var dealerId = await GetDealerIdFromHash(PasswordHash);
-            var dealerCarId = DealerCars.MakeDealerId(dealerId.ToString(), CarId.ToString());
 
             // Retrieve a dealerCar value if it exists
-            var dealerCar = await _context.DealersCars.FindAsync(dealerCarId);
+            var dealerCar = await _context.DealersCars.FindAsync(dealerId, CarId);
             if (dealerCar == null)
             {
                 return NotFound();
@@ -214,12 +213,57 @@ namespace CarDeals.Controllers
         // POST: api/Cars
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Car>> PostCar(Car car)
+        public async Task<ActionResult<Car>> AddCar(Car car)
         {
             _context.Cars.Add(car);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetCar", new { id = car.Id }, car);
+            return Ok(car);
+        }
+
+        // POST: api/Cars/Stock
+        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPost("Stock")]
+        public async Task<ActionResult<Car>> AddStock(int CarId, string passwordHash, int Stock)
+        {
+            var dealerId = await GetDealerIdFromHash(passwordHash);
+
+            // Check if this already exists
+            var potentialDealerCar = await _context.DealersCars.FindAsync(dealerId, CarId);
+            if (potentialDealerCar != null)
+            {
+                return new ConflictObjectResult(new { message = "A record like this already exists." });
+            }
+
+            var dealerCar = new DealerCars(dealerId, CarId, Stock);
+
+            _context.DealersCars.Add(dealerCar);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { status = 200 });
+        }
+
+        // POST: api/Cars/Company
+        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPost("Company")]
+        public async Task<ActionResult<Car>> AddCompany(string Name, string? Address)
+        {
+            // Check if this already exists
+            var potentialDealerCar = await _context.Companies.SingleOrDefaultAsync(
+                value => string.Equals(value.Name, Name, StringComparison.OrdinalIgnoreCase)
+            );
+
+            if (potentialDealerCar != null)
+            {
+                return new ConflictObjectResult(new { message = "A record like this already exists." });
+            }
+
+            var company = new Company(Name, Address);
+
+            _context.Companies.Add(company);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { status = 200, id = company.Id });
         }
 
         // DELETE: api/Cars/5
@@ -246,21 +290,28 @@ namespace CarDeals.Controllers
         private async Task<double> GetDealerIdFromHash(string passwordHash)
         {
             // Find the ID associated with the passwordHash
-            var foundDealerQuery = (from dealer in _context.Deals
+            var foundDealerQuery = from dealer in _context.Deals
                                  where dealer.PasswordHash == passwordHash
-                                 select dealer) ?? throw new Exception("Not found");
+                                 select dealer;
             var foundDealer = await foundDealerQuery.SingleAsync();
-            if (_context.SignedInUsers.TryGetValue(foundDealer.Name, out DateTime timeLastSignedIn))
+            if (foundDealer.PasswordHash != passwordHash)
+            {
+                throw new Exception("PasswordHash does not match");
+            }
+
+            var foundUser = await _context.SignedInUsers.FindAsync(passwordHash);
+            if (foundUser != null)
             {
                 // Check if the session has lasted for too long
-                var MinutesElapsed = (DateTime.Now - timeLastSignedIn).TotalMinutes;
+                var MinutesElapsed = (DateTime.Now - foundUser.LastSignedIn).TotalMinutes;
                 if (MinutesElapsed > MINUTES_ALLOWED)
                 {
                     throw new Exception("Session expired");
                 } else
                 {
                     // Renew the session counter (since the user interacted with it)
-                    _context.SignedInUsers[foundDealer.Name] = DateTime.Now;
+                    foundUser.LastSignedIn = DateTime.Now;
+                    _context.SignedInUsers.Update(foundUser);
                 }
             }
 

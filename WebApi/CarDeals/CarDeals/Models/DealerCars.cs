@@ -1,39 +1,36 @@
 ﻿// Summary: Model to allow dealers to store multiple cars with varying stocks per dealer
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace CarDeals.Models
 {
+    [PrimaryKey(nameof(DealerId), nameof(CarId))]
     public class DealerCars
     {
-        // Primary Foreign Key Made from Dealer.Id and Car.Id
-        // Format: `{Dealer.Id} | {Car.Id}`
-
         public DealerCars() { }
-        public DealerCars(string dealerId, string carId)
+
+        public DealerCars(double dealerId, int carId, int stock)
         {
-            Id = MakeDealerId(dealerId, carId);
+            DealerId = dealerId;
+            CarId = carId;
+            Stock = stock;
         }
 
-        [Key]
-        public string Id { get; set; } = null!;
+
+        // Primary Foreign Keys
+        [Required]
+        [Column(Order = 0)]
+        [ForeignKey(nameof(Dealer.Id))]
+        public double DealerId { get; set; }
+
+        [Required]
+        [Column(Order = 1)]
+        [ForeignKey(nameof(Car.Id))]
+        public int CarId { get; set; }
 
         // Attributes
         [Required]
         public int Stock { get; set; }
-
-        public string GetDealerId()
-        {
-            return Id.Split(" | ", StringSplitOptions.None)[0];
-        }
-
-        public string GetCarId()
-        {
-            return Id.Split(" | ", StringSplitOptions.None)[1];
-        }
-
-        public static string MakeDealerId(string dealerId, string carId)
-        {
-            return $"{dealerId} | {carId}";
-        }
     }
 }
