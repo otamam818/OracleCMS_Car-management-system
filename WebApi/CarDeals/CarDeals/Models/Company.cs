@@ -10,13 +10,13 @@ namespace CarDeals.Models
 
         public Company(string Name, string? Address)
         {
-            Id = Utils.SecondsSinceEpoch();
+            Id = $"{Utils.SecondsSinceEpoch()}/{Utils.ComputeHashValue(Name)}";
             this.Name = Name;
             this.Address = Address;
         }
 
         [Key]
-        public double Id {  get; set; }
+        public string Id { get; set; } = null!;
 
         [Required]
         public string Name { get; set; } = null!;

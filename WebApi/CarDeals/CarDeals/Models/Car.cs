@@ -4,13 +4,13 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace CarDeals.Models
 {
-    public class Car(int CompanyId, float Price, string Model)
+    public class Car(string CompanyId, float Price, string Model)
     {
         [Key]
         public int Id { get; set; }
 
         [ForeignKey(nameof(Company.Id))]
-        public int CompanyId { get; set; } = CompanyId;
+        public string CompanyId { get; set; } = CompanyId;
 
         [Required]
         public float Price { get; set; } = Price;

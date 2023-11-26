@@ -28,6 +28,20 @@ namespace CarDeals.Controllers
             return await _context.Deals.Select(u => u.Name).ToListAsync();
         }
 
+        // GET: api/Dealers/Name/{passwordHash}
+        [HttpGet("Name/{passwordHash}")]
+        public async Task<ActionResult<IEnumerable<string>>> GetDealerName(string passwordHash)
+        {
+            var dealerId = await Utils.GetDealerIdFromHash(_context, passwordHash);
+            var dealer = await _context.Deals.FindAsync(dealerId);
+            if (dealer == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(new { name = dealer.Name });
+        }
+
         // GET: api/Dealers/SignInStatus/
         [HttpGet("SignInStatus/{passwordHash}")]
         public async Task<ActionResult<IEnumerable<string>>> SignInStatus(string passwordHash)
@@ -79,7 +93,7 @@ namespace CarDeals.Controllers
             /* The user would be entering their password, not the passwordHash itself
              * This is where a hash function would be run on the Password+SALT combination
              */
-            password = ComputeHashValue(password + SALT);
+            password = Utils.ComputeHashValue(password + SALT);
 
             // No conflicts have arisen, it can now be added to the database
             var dealer = new Dealer(username, password);
@@ -109,19 +123,55 @@ namespace CarDeals.Controllers
         public async Task<IActionResult> SignInDealer(string username, string password)
         {
             // Before we sign them in, we must check if the passwords match
-            var ExpectedPassword = ComputeHashValue(password + SALT);
+            var ExpectedPassword = Utils.ComputeHashValue(password + SALT);
             var ExecutedQuery = from dealers in _context.Deals
                             where dealers.PasswordHash == ExpectedPassword && dealers.Name == username
                             select dealers;
             try
             {
                 var FoundDealer = await ExecutedQuery.SingleAsync();
-                _context.SignedInUsers.Update(new SignedInUser(FoundDealer.PasswordHash));
+                var CurrSignedInUser = _context.SignedInUsers.Find(FoundDealer.PasswordHash);
+                if (CurrSignedInUser != null)
+                {
+                    CurrSignedInUser.LastSignedIn = DateTime.Now;
+                    _context.SignedInUsers.Update(CurrSignedInUser);
+                }
+                else
+                {
+                    _context.SignedInUsers.Add(new SignedInUser(FoundDealer.PasswordHash));
+                }
 
                 await _context.SaveChangesAsync();
 
                 return Ok(new {
                     hashValue = FoundDealer.PasswordHash,
+                    status = 200
+                } );
+            } catch (InvalidOperationException)
+            {
+                throw;
+            } catch (DbUpdateConcurrencyException)
+            {
+                throw;
+            }
+        }
+
+        // POST: api/Dealers/SignOut
+        [HttpPost("SignOut")]
+        public async Task<IActionResult> SignOutDealer(string passwordHash)
+        {
+            // Before we sign them in, we must check if the passwords match
+            try
+            {
+                var FoundAccount = await _context.SignedInUsers.FindAsync(passwordHash);
+                if (FoundAccount != null)
+                {
+                    _context.SignedInUsers.Remove(FoundAccount);
+                }
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new {
                     status = 200
                 } );
             } catch (InvalidOperationException)
@@ -149,18 +199,5 @@ namespace CarDeals.Controllers
             return NoContent();
         }
 
-        private static string ComputeHashValue(string value)
-        {
-            string HashString;
-            // Convert the string to a byte array
-            byte[] messageBytes = Encoding.UTF8.GetBytes(value);
-
-            // Compute the hash from the byte array
-            byte[] hashValue = SHA256.HashData(messageBytes);
-
-            // Convert the hash value to a hexadecimal string
-            HashString = BitConverter.ToString(hashValue).Replace("-", "");
-            return HashString;
-        }
     }
 }

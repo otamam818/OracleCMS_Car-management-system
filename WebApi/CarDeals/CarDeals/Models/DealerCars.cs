@@ -10,7 +10,7 @@ namespace CarDeals.Models
     {
         public DealerCars() { }
 
-        public DealerCars(double dealerId, int carId, int stock)
+        public DealerCars(string dealerId, int carId, int stock)
         {
             DealerId = dealerId;
             CarId = carId;
@@ -22,7 +22,7 @@ namespace CarDeals.Models
         [Required]
         [Column(Order = 0)]
         [ForeignKey(nameof(Dealer.Id))]
-        public double DealerId { get; set; }
+        public string DealerId { get; set; } = null!;
 
         [Required]
         [Column(Order = 1)]

@@ -1,12 +1,34 @@
 <script lang="ts">
-    import { getPasswordHash, navigateOnStart } from "../../lib/shared";
+  import { apiPath, executeGet, executePost } from "../../lib/api";
+  import { getPasswordHash, navigateOnStart } from "../../lib/shared";
+    import CarStock from "./CarStock.svelte";
+    import Search from "./Search.svelte";
+    import { dealerDataStore, type IDealerData } from "./store";
 
-  // A sample javascript object for the table data
-  let cars = [
-    { name: "Ford", make: "Mustang", model: "GT", quantity: 3 },
-    { name: "Toyota", make: "Corolla", model: "S", quantity: 5 },
-    { name: "Honda", make: "Civic", model: "EX", quantity: 4 },
-  ];
+
+  let dealerData: IDealerData | undefined = undefined;
+
+  dealerDataStore.subscribe(value => {
+    dealerData = value;
+  })
+
+  async function handleSignOut() {
+    // The user's session is still active, we may as well sign them out since
+    // they are asking for it
+    const passwordHash = getPasswordHash() as string;
+
+    interface IResponse { status: number }
+    const response: IResponse = await executePost(
+      new URL(`${apiPath}/Dealers/SignOut`), 
+      { passwordHash }
+    );
+
+    if (response.status == 200) {
+      window.location.href = '/login';
+    } else {
+      console.error("Response status was not 200 in SignOut, something went wrong");
+    }
+  }
 
   async function getAllData() {
     let currPageState = await navigateOnStart();
@@ -15,37 +37,50 @@
     }
 
     const passwordHash = getPasswordHash() as string;
-    console.log({passwordHash});
+    console.log(passwordHash);
+    
+    let carList = await executeGet(
+      new URL(`${apiPath}/Cars/dealer/${passwordHash}`)) as IDealerData;
+
+    let dealerResponse = await executeGet(
+      new URL(`${apiPath}/Dealers/Name/${passwordHash}`)
+    ) as { name: string };
+    carList.dealerName = dealerResponse.name;
+    
+    dealerDataStore.set(carList);
   }
 
   getAllData();
 </script>
 
+{#if dealerData === undefined}
+<h1> Welcome </h1>
+{:else}
 <div class="container">
-  <!-- The first component: a title -->
-  <h1>SomeTitle</h1>
-
-  <!-- The second component: an input field -->
-  <input type="text" placeholder="Enter some text" />
-
-  <!-- The third component: a table -->
+  <h1>{dealerData.dealerName}</h1>
+  <Search />
   <table>
     <tr>
-      <th>Name</th>
       <th>Make</th>
       <th>Model</th>
+      <th>Price</th>
       <th>Quantity</th>
     </tr>
-    {#each cars as car}
+    {#each dealerData.carList as car}
     <tr>
-      <td>{car.name}</td>
       <td>{car.make}</td>
       <td>{car.model}</td>
-      <td>{car.quantity}</td>
+      <td>$ {car.price}</td>
+      <CarStock CarId={car.carId} stockValue={car.stock}/>
     </tr>
     {/each}
   </table>
 </div>
+{/if}
+
+<button on:click={handleSignOut}>
+  SignOut
+</button>
 
 <style>
   /* A style to center the components */

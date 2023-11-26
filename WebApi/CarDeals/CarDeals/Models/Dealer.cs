@@ -7,7 +7,7 @@ namespace CarDeals.Models
     public class Dealer(string Name, string PasswordHash)
     {
         [Key]
-        public double Id { get; set; } = Utils.SecondsSinceEpoch();
+        public string Id { get; set; } = $"{Utils.SecondsSinceEpoch()}/{Utils.ComputeHashValue(Name)}";
 
         [Required]
         public string Name { get; set; } = Name;
